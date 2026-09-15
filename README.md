@@ -29,14 +29,45 @@ curl -# -o "$EXTENSIONS_FOLDER/vlc-delete.lua" "https://raw.githubusercontent.co
 
 Note: If [trash-cli](https://pypi.org/project/trash-cli/) is installed videos will be moved to the recycle bin instead of removing them directly.
 
+## Hotkey (optional)
+
+VLC extensions can't register shortcut keys, so the hotkey is a separate Lua interface script, `vlc-delete-hotkey.lua`.
+It needs `vlc-delete.lua` installed as described above.
+
+1. Copy `vlc-delete-hotkey.lua` to the `lua/intf` folder next to the `lua/extensions` folder, e.g. `~/.local/share/vlc/lua/intf/` on Linux or `%appdata%\vlc\lua\intf\` on Windows.
+
+   ```bash
+   INTF_FOLDER="$HOME/.local/share/vlc/lua/intf"
+   mkdir -p "$INTF_FOLDER"
+   curl -# -o "$INTF_FOLDER/vlc-delete-hotkey.lua" "https://raw.githubusercontent.com/surrim/vlc-delete/master/vlc-delete-hotkey.lua"
+   ```
+
+2. Enable the script in `Tools` → `Preferences` → `Show settings: All` → `Interface` → `Main interfaces`:
+   - check `Lua interpreter`
+   - in `Main interfaces` → `Lua`, set `Lua interface` to `vlc-delete-hotkey`
+
+   Or add these lines to `vlcrc` (`~/.config/vlc/vlcrc` on Linux, `%appdata%\vlc\vlcrc` on Windows) while VLC is closed:
+
+   ```ini
+   extraintf=luaintf
+   lua-intf=vlc-delete-hotkey
+   ```
+
+3. The default hotkey is `d`, which VLC already uses for `Toggle deinterlacing`.
+   Clear that binding in `Tools` → `Preferences` → `Hotkeys` (or add `key-deinterlace=` to `vlcrc`), otherwise both actions run.
+   To use another key, edit `HOTKEY` at the top of `vlc-delete-hotkey.lua`, e.g. `"Shift+Delete"` or `"Ctrl+Alt+x"`.
+
+4. Restart VLC.
+
 # Usage
 
-When playing a video you can click on `View` → `Remove current file from playlist and disk`. Then the video will be removed and the next one is played.
+When playing a video you can click on `View` → `Remove current file from playlist and disk`, or press the hotkey. Then the video will be removed and the next one is played.
 
 # Known bugs and issues
 
-- There is no *fixed* shortcut key; it depends on the menu language.  
-  For instance in English: Press and hold `Alt`  to activate the hotkey navigation, then press `i` (`Vi̲ew`), then `r` (`R̲emove current file from playlist and disk`). I haven't found a solution to implement a fixed key; probably it's not supported by the VLC Media Player.  
+- The hotkey doesn't work while the playlist has the keyboard focus. There `Delete` only removes the selected items from the playlist.
+- Without `vlc-delete-hotkey.lua` there is no *fixed* shortcut key; it depends on the menu language.  
+  For instance in English: Press and hold `Alt`  to activate the hotkey navigation, then press `i` (`Vi̲ew`), then `r` (`R̲emove current file from playlist and disk`).  
   ![Hotkeys animation](https://raw.githubusercontent.com/surrim/vlc-delete/master/hotkeys.webp)
   - For AutoHotKey v2 and English menus, you can use the following script.
 

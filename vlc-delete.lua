@@ -1,5 +1,5 @@
 --[[
-	Copyright 2015-2025 surrim
+	Copyright 2015-2026 surrim
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -18,12 +18,13 @@
 -- Configuration:
 -- Set ASK_CONFIRMATION = true if you want the extension to show a confirmation
 -- dialog before removing the current file. Default is false (no confirmation).
+-- The hotkey (vlc-delete-hotkey.lua) never asks for confirmation.
 local ASK_CONFIRMATION = false
 
 function descriptor()
 	return {
 		title = "VLC Delete";
-		version = "0.1";
+		version = "0.2";
 		author = "surrim";
 		url = "https://github.com/surrim/vlc-delete/";
 		shortdesc = "&Remove current file from playlist and filesystem";
@@ -31,6 +32,7 @@ function descriptor()
 <h1>vlc-delete</h1>"
 When you're playing a file, use VLC Delete to
 delete the current file from your playlist <b>and filesystem</b> with one click.<br />
+Install vlc-delete-hotkey.lua too for a keyboard shortcut.<br />
 This extension has been tested on GNU Linux with VLC 2.x and 3.x.<br />
 The author is not responsible for damage caused by this extension.
 		]];
@@ -77,8 +79,16 @@ function command_exists(command)
 	return retval ~= nil
 end
 
+-- Quotes a string for POSIX shells, so characters like $ and ` stay literal
+function shell_quote(str)
+	return "'" .. string.gsub(str, "'", "'\\''") .. "'"
+end
+
 function current_uri_and_os()
 	local item = (vlc.player or vlc.input).item()
+	if not item then
+		return nil
+	end
 	local uri = item:uri()
 	local is_posix = (package.config:sub(1, 1) == "/")
 	if uri:find("^file:///") ~= nil then
@@ -91,6 +101,43 @@ function current_uri_and_os()
 		end
 	end
 	return uri, is_posix
+end
+
+-- Removes the current file from the playlist and the filesystem.
+-- Returns the file name, or nil and an error message.
+function delete_current_file()
+	local uri, is_posix = current_uri_and_os()
+	if not uri then
+		return nil, "Could not get current file"
+	end
+
+	vlc.msg.info("[vlc-delete] removing: " .. uri)
+	remove_from_playlist()
+
+	local retval, err
+	if is_posix then
+		local trash_put_exists = command_exists("trash-put --version > /dev/null")
+		local rm_exists = command_exists("rm --version > /dev/null")
+
+		if trash_put_exists then
+			vlc.msg.dbg("[vlc-delete] removing using trash-put")
+			retval, err = os.execute("trash-put " .. shell_quote(uri))
+		elseif rm_exists then
+			vlc.msg.dbg("[vlc-delete] removing using rm")
+			retval, err = os.execute("rm " .. shell_quote(uri))
+		else
+			vlc.msg.dbg("[vlc-delete] removing using os.remove")
+			retval, err = os.remove(uri)
+		end
+	else
+		vlc.msg.dbg("[vlc-delete] removing using del")
+		retval, err = windows_delete(uri, 3, 1)
+	end
+
+	if retval == nil then
+		return nil, "Could not remove \"" .. uri .. "\": " .. (err or "nil")
+	end
+	return uri
 end
 
 dlg = nil
@@ -111,6 +158,7 @@ function show_confirmation_dialog()
 	local uri, is_posix = current_uri_and_os()
 	if not uri then
 		vlc.msg.err("[vlc-delete] error: Could not get current file")
+		deactivate()
 		return
 	end
 
@@ -127,37 +175,12 @@ function click_remove()
 		dlg = nil
 	end
 
-	local uri, is_posix = current_uri_and_os()
-	vlc.msg.info("[vlc-delete] removing: " .. uri)
-	remove_from_playlist()
-
-	if is_posix then
-		local trash_put_exists = command_exists("trash-put --version > /dev/null")
-		local rm_exists = command_exists("rm --version > /dev/null")
-
-		if trash_put_exists then
-			vlc.msg.dbg("[vlc-delete] removing using trash-put")
-			uri = string.gsub(uri, "\"", "\\\"")
-			retval, err = os.execute("trash-put \"" .. uri .. "\"")
-		elseif rm_exists then
-			vlc.msg.dbg("[vlc-delete] removing using rm")
-			uri = string.gsub(uri, "\"", "\\\"")
-			retval, err = os.execute("rm \"" .. uri .. "\"")
-		else
-			vlc.msg.dbg("[vlc-delete] removing using os.remove")
-			retval, err = os.remove(uri)
-		end
-	else
-		vlc.msg.dbg("[vlc-delete] removing using del")
-		retval, err = windows_delete(uri, 3, 1)
-	end
-
-	if retval == nil then
-		vlc.msg.err("[vlc-delete] error: " .. (err or "nil"))
+	local uri, err = delete_current_file()
+	if uri == nil then
+		vlc.msg.err("[vlc-delete] error: " .. err)
 		d = vlc.dialog("VLC Delete")
-		d:add_label("Could not remove \"" .. uri .. "\"", 1, 1, 1, 1)
-		d:add_label(err, 1, 2, 1, 1)
-		d:add_button("OK", click_ok, 1, 3, 1, 1)
+		d:add_label(err, 1, 1, 1, 1)
+		d:add_button("OK", click_ok, 1, 2, 1, 1)
 		d:show()
 	else
 		deactivate()
